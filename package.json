@@ -1,0 +1,37 @@
+{
+  "name": "url-shortener-cdk",
+  "version": "1.0.0",
+  "description": "CDK stack for URL shortener and logging with Golang Lambda and DynamoDB",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "cdk": "cdk",
+    "deploy": "./deploy.sh",
+    "destroy": "./destroy.sh",
+    "synth": "cdk synth"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.0.0",
+    "constructs": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^16.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^4.5.4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/url-shortener-cdk.git"
+  },
+  "keywords": [
+    "aws",
+    "cdk",
+    "lambda",
+    "dynamodb",
+    "golang",
+    "url-shortener"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
+}

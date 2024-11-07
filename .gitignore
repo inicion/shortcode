@@ -1,0 +1,4 @@
+node_modules
+bin/*
+infra/**/*.js
+cdk.out
