@@ -2,3 +2,5 @@ node_modules
 bin/*
 infra/**/*.js
 cdk.out
+cdk.context.json
+.env
