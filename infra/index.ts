@@ -3,10 +3,18 @@ import * as cdk from 'aws-cdk-lib';
 import { URLShortenerStack } from './url-shortener-stack';
 
 const app = new cdk.App();
+console.log(app.node.tryGetContext("tableName"));
+console.log(app.node.tryGetContext("domainName"));
+console.log(app.node.tryGetContext("accountId"));
+console.log(app.node.tryGetContext("region"));
+
+
+
 new URLShortenerStack(app, 'URLShortenerStack', {
-    tableName: process.env.DYNAMODB_TABLE_NAME || 'DefaultTableName',
-    domainName: process.env.DOMAIN_NAME || 'example.com',
+    tableName: app.node.tryGetContext("tableName"),
+    domainName: app.node.tryGetContext("domainName"),
     env: {
-        region: process.env.AWS_REGION || 'us-east-1',
+        account: app.node.tryGetContext("accountId"),
+        region: app.node.tryGetContext("region"),
     },
 });
