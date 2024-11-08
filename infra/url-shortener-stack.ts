@@ -4,7 +4,6 @@ import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as route53 from 'aws-cdk-lib/aws-route53';
 import * as targets from 'aws-cdk-lib/aws-route53-targets';
 import * as acm from 'aws-cdk-lib/aws-certificatemanager';
-// import * as iam from 'aws-cdk-lib/aws-iam';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as path from 'path';
 
@@ -29,13 +28,6 @@ export class URLShortenerStack extends cdk.Stack {
             billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
         });
 
-        // Global Secondary Index for querying view logs
-        table.addGlobalSecondaryIndex({
-            indexName: 'ShortcodeIndex',
-            partitionKey: { name: 'Shortcode', type: dynamodb.AttributeType.STRING },
-            sortKey: { name: 'Timestamp', type: dynamodb.AttributeType.STRING },
-            projectionType: dynamodb.ProjectionType.ALL,
-        });
         // Lambda Function
         const urlShortenerLambda = new lambda.Function(this, 'URLShortenerHandler', {
             runtime: lambda.Runtime.PROVIDED_AL2,
@@ -50,16 +42,49 @@ export class URLShortenerStack extends cdk.Stack {
 
         // Grant the Lambda function permissions to access DynamoDB
         table.grantReadWriteData(urlShortenerLambda);
+
         // API Gateway
         const api = new apigateway.LambdaRestApi(this, 'UrlShortenerApi', {
             handler: urlShortenerLambda,
             proxy: false,
         });
 
-        api.root.addResource('{code}').addMethod('GET');
+        const shortcodeResource = api.root.addResource('s');
+        shortcodeResource.addResource('{code}').addMethod('GET', new apigateway.LambdaIntegration(urlShortenerLambda), {
+            apiKeyRequired: false
+        });
 
         // Add a default ANY method to the root resource
         api.root.addMethod('ANY');
+
+        // Add a new resource and method for generating shortcodes
+        const generateResource = api.root.addResource('generate');
+        const generateMethod = generateResource.addMethod('POST', new apigateway.LambdaIntegration(urlShortenerLambda), {
+            apiKeyRequired: true,
+        });
+
+        // Create an API key and usage plan
+        const apiKey = api.addApiKey('ApiKey');
+        const plan = api.addUsagePlan('UsagePlan', {
+            name: 'Easy',
+            throttle: {
+                rateLimit: 10,
+                burstLimit: 2,
+            },
+        });
+        plan.addApiKey(apiKey);
+        plan.addApiStage({
+            stage: api.deploymentStage,
+            throttle: [
+                {
+                    method: generateMethod,
+                    throttle: {
+                        rateLimit: 10,
+                        burstLimit: 2,
+                    },
+                },
+            ],
+        });
 
         // Route 53 Hosted Zone Lookup
         const hostedZone = route53.HostedZone.fromLookup(this, 'HostedZone', {
