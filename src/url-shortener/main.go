@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"time"
@@ -30,11 +32,114 @@ func init() {
 	log.Println("DynamoDB client initialized")
 }
 
+func generateShortcode(length int) string {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	seededRand := rand.New(rand.NewSource(time.Now().UnixNano()))
+	b := make([]byte, length)
+	for i := range b {
+		b[i] = charset[seededRand.Intn(len(charset))]
+	}
+	return string(b)
+}
+
 // Handler for the Lambda function
 func handleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	log.Println("Handling request")
 
-	// Retrieve the shortcode from the path parameters
+	switch request.Resource {
+	case "/generate":
+		return handleGenerate(ctx, request)
+	case "/s/{code}":
+		return handleRedirect(ctx, request)
+	default:
+		return events.APIGatewayProxyResponse{
+			StatusCode: http.StatusNotFound,
+			Body:       "Not Found",
+		}, nil
+	}
+}
+
+func handleGenerate(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	var body struct {
+		URL         string `json:"url"`
+		Shortcode   string `json:"shortcode,omitempty"`
+		Description string `json:"description"`
+	}
+	if err := json.Unmarshal([]byte(request.Body), &body); err != nil {
+		log.Printf("Error parsing request body: %v", err)
+		return events.APIGatewayProxyResponse{
+			StatusCode: http.StatusBadRequest,
+			Body:       "Invalid request body",
+		}, nil
+	}
+
+	if body.URL == "" || body.Description == "" {
+		log.Println("Missing 'url' or 'description' in request body")
+		return events.APIGatewayProxyResponse{
+			StatusCode: http.StatusBadRequest,
+			Body:       "Missing 'url' or 'description' in request body",
+		}, nil
+	}
+
+	shortcode := body.Shortcode
+	if shortcode == "" {
+		for i := 0; i < 5; i++ { // Try up to 5 times to generate a unique shortcode
+			shortcode = generateShortcode(4)
+			// Check if the shortcode already exists
+			result, err := dbClient.GetItem(ctx, &dynamodb.GetItemInput{
+				TableName: aws.String(tableName),
+				Key: map[string]types.AttributeValue{
+					"Shortcode": &types.AttributeValueMemberS{Value: shortcode},
+					"SortKey":   &types.AttributeValueMemberS{Value: "META"},
+				},
+			})
+			if err != nil {
+				log.Printf("Error checking shortcode: %v", err)
+				return events.APIGatewayProxyResponse{
+					StatusCode: http.StatusInternalServerError,
+					Body:       "Error checking shortcode",
+				}, nil
+			}
+			if result.Item == nil {
+				break // Shortcode is unique
+			}
+			if i == 4 {
+				log.Println("Failed to generate a unique shortcode after 5 attempts")
+				return events.APIGatewayProxyResponse{
+					StatusCode: http.StatusInternalServerError,
+					Body:       "Failed to generate a unique shortcode",
+				}, nil
+			}
+		}
+	}
+
+	_, err := dbClient.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName: aws.String(tableName),
+		Item: map[string]types.AttributeValue{
+			"Shortcode":   &types.AttributeValueMemberS{Value: shortcode},
+			"SortKey":     &types.AttributeValueMemberS{Value: "META"},
+			"URL":         &types.AttributeValueMemberS{Value: body.URL},
+			"Description": &types.AttributeValueMemberS{Value: body.Description},
+		},
+	})
+	if err != nil {
+		log.Printf("Error saving shortcode: %v", err)
+		return events.APIGatewayProxyResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       "Error saving shortcode",
+		}, nil
+	}
+
+	responseBody, _ := json.Marshal(map[string]string{
+		"shortcode": shortcode,
+	})
+	return events.APIGatewayProxyResponse{
+		StatusCode: http.StatusOK,
+		Body:       string(responseBody),
+	}, nil
+}
+
+func handleRedirect(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	shortcode, exists := request.PathParameters["code"]
 	if !exists || shortcode == "" {
 		log.Println("Missing 'code' parameter")
@@ -44,7 +149,6 @@ func handleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (
 		}, nil
 	}
 
-	// Fetch the URL associated with the shortcode from DynamoDB
 	result, err := dbClient.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: aws.String(tableName),
 		Key: map[string]types.AttributeValue{
@@ -60,10 +164,8 @@ func handleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (
 		}, nil
 	}
 
-	// Retrieve the long URL from the result
 	longURL := result.Item["URL"].(*types.AttributeValueMemberS).Value
 
-	// Log the usage to DynamoDB
 	_, err = dbClient.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: aws.String(tableName),
 		Item: map[string]types.AttributeValue{
@@ -81,7 +183,6 @@ func handleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (
 		}, nil
 	}
 
-	// Return a redirect response
 	log.Printf("Redirecting to: %s", longURL)
 	return events.APIGatewayProxyResponse{
 		StatusCode: http.StatusFound,
