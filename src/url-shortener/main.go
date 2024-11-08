@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -64,6 +65,11 @@ func handleGenerate(ctx context.Context, request events.APIGatewayProxyRequest) 
 		URL         string `json:"url"`
 		Shortcode   string `json:"shortcode,omitempty"`
 		Description string `json:"description"`
+		AndroidURL  string `json:"androidUrl,omitempty"`
+		IOSURL      string `json:"iosUrl,omitempty"`
+		LinuxURL    string `json:"linuxUrl,omitempty"`
+		MacURL      string `json:"macUrl,omitempty"`
+		WindowsURL  string `json:"windowsUrl,omitempty"`
 	}
 	if err := json.Unmarshal([]byte(request.Body), &body); err != nil {
 		log.Printf("Error parsing request body: %v", err)
@@ -113,14 +119,32 @@ func handleGenerate(ctx context.Context, request events.APIGatewayProxyRequest) 
 		}
 	}
 
+	item := map[string]types.AttributeValue{
+		"Shortcode":   &types.AttributeValueMemberS{Value: shortcode},
+		"SortKey":     &types.AttributeValueMemberS{Value: "META"},
+		"URL":         &types.AttributeValueMemberS{Value: body.URL},
+		"Description": &types.AttributeValueMemberS{Value: body.Description},
+	}
+
+	if body.AndroidURL != "" {
+		item["AndroidURL"] = &types.AttributeValueMemberS{Value: body.AndroidURL}
+	}
+	if body.IOSURL != "" {
+		item["IOSURL"] = &types.AttributeValueMemberS{Value: body.IOSURL}
+	}
+	if body.LinuxURL != "" {
+		item["LinuxURL"] = &types.AttributeValueMemberS{Value: body.LinuxURL}
+	}
+	if body.MacURL != "" {
+		item["MacURL"] = &types.AttributeValueMemberS{Value: body.MacURL}
+	}
+	if body.WindowsURL != "" {
+		item["WindowsURL"] = &types.AttributeValueMemberS{Value: body.WindowsURL}
+	}
+
 	_, err := dbClient.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: aws.String(tableName),
-		Item: map[string]types.AttributeValue{
-			"Shortcode":   &types.AttributeValueMemberS{Value: shortcode},
-			"SortKey":     &types.AttributeValueMemberS{Value: "META"},
-			"URL":         &types.AttributeValueMemberS{Value: body.URL},
-			"Description": &types.AttributeValueMemberS{Value: body.Description},
-		},
+		Item:      item,
 	})
 	if err != nil {
 		log.Printf("Error saving shortcode: %v", err)
@@ -165,6 +189,20 @@ func handleRedirect(ctx context.Context, request events.APIGatewayProxyRequest) 
 	}
 
 	longURL := result.Item["URL"].(*types.AttributeValueMemberS).Value
+
+	// Check the User-Agent header to determine the device type
+	userAgent := request.Headers["User-Agent"]
+	if strings.Contains(strings.ToLower(userAgent), "android") && result.Item["AndroidURL"] != nil {
+		longURL = result.Item["AndroidURL"].(*types.AttributeValueMemberS).Value
+	} else if (strings.Contains(strings.ToLower(userAgent), "iphone") || strings.Contains(strings.ToLower(userAgent), "ipad")) && result.Item["IOSURL"] != nil {
+		longURL = result.Item["IOSURL"].(*types.AttributeValueMemberS).Value
+	} else if strings.Contains(strings.ToLower(userAgent), "linux") && result.Item["LinuxURL"] != nil {
+		longURL = result.Item["LinuxURL"].(*types.AttributeValueMemberS).Value
+	} else if strings.Contains(strings.ToLower(userAgent), "macintosh") && result.Item["MacURL"] != nil {
+		longURL = result.Item["MacURL"].(*types.AttributeValueMemberS).Value
+	} else if strings.Contains(strings.ToLower(userAgent), "windows") && result.Item["WindowsURL"] != nil {
+		longURL = result.Item["WindowsURL"].(*types.AttributeValueMemberS).Value
+	}
 
 	_, err = dbClient.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: aws.String(tableName),
