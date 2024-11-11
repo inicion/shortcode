@@ -29,37 +29,15 @@ func HandleGenerate(ctx context.Context, request events.APIGatewayProxyRequest) 
 		}, nil
 	}
 
-	shortcode := body.Shortcode
-	if shortcode == "" {
-		for i := 0; i < 5; i++ { // Try up to 5 times to generate a unique shortcode
-			shortcode, err := utils.GenerateUniqueShortcode(ctx, body.Shortcode)
-			if err != nil {
-				log.Printf("Error generating shortcode: %v", err)
-				return events.APIGatewayProxyResponse{
-					StatusCode: http.StatusInternalServerError,
-					Body:       "Failed to generate a unique shortcode",
-				}, nil
-			}
-			// Check if the shortcode already exists
-			result, err := utils.GetDynamoDBItem(ctx, shortcode)
-			if err != nil {
-				log.Printf("Error checking shortcode: %v", err)
-				return events.APIGatewayProxyResponse{
-					StatusCode: http.StatusInternalServerError,
-					Body:       "Error checking shortcode",
-				}, nil
-			}
-			if result == nil {
-				break // Shortcode is unique
-			}
-			if i == 4 {
-				log.Println("Failed to generate a unique shortcode after 5 attempts")
-				return events.APIGatewayProxyResponse{
-					StatusCode: http.StatusInternalServerError,
-					Body:       "Failed to generate a unique shortcode",
-				}, nil
-			}
-		}
+	var err error
+	var shortcode string
+	shortcode, err = utils.GenerateUniqueShortcode(ctx, body.Shortcode)
+	if err != nil {
+		log.Printf("Error generating unique shortcode: %v", err)
+		return events.APIGatewayProxyResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       "Failed to generate a unique shortcode",
+		}, nil
 	}
 
 	item := utils.CreateDynamoDBItem(shortcode, body)

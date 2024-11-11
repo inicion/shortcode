@@ -4,9 +4,11 @@ import (
 	"context"
 	"log"
 	"os"
+	"strings"
 	"time"
 	"url-shortener/models"
 
+	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -50,7 +52,25 @@ func PutDynamoDBItem(ctx context.Context, item map[string]types.AttributeValue) 
 	return err
 }
 
-func LogRedirect(ctx context.Context, shortcode string) error {
+func LogRedirect(ctx context.Context, shortcode string, request events.APIGatewayProxyRequest) error {
+	// Extract platform information from User-Agent header
+	userAgent := request.Headers["User-Agent"]
+	platform := "unknown"
+	if strings.Contains(strings.ToLower(userAgent), "android") {
+		platform = "android"
+	} else if strings.Contains(strings.ToLower(userAgent), "iphone") || strings.Contains(strings.ToLower(userAgent), "ipad") {
+		platform = "ios"
+	} else if strings.Contains(strings.ToLower(userAgent), "linux") {
+		platform = "linux"
+	} else if strings.Contains(strings.ToLower(userAgent), "macintosh") {
+		platform = "mac"
+	} else if strings.Contains(strings.ToLower(userAgent), "windows") {
+		platform = "windows"
+	}
+
+	// Extract IP address from request context
+	ipAddress := request.RequestContext.Identity.SourceIP
+
 	_, err := dbClient.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: aws.String(tableName),
 		Item: map[string]types.AttributeValue{
@@ -58,6 +78,8 @@ func LogRedirect(ctx context.Context, shortcode string) error {
 			"SortKey":   &types.AttributeValueMemberS{Value: "VIEW#" + time.Now().Format(time.RFC3339)},
 			"Timestamp": &types.AttributeValueMemberS{Value: time.Now().Format(time.RFC3339)},
 			"Action":    &types.AttributeValueMemberS{Value: "redirect"},
+			"Platform":  &types.AttributeValueMemberS{Value: platform},
+			"IPAddress": &types.AttributeValueMemberS{Value: ipAddress},
 		},
 	})
 	return err

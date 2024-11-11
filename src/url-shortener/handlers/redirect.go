@@ -46,12 +46,13 @@ func HandleRedirect(ctx context.Context, request events.APIGatewayProxyRequest) 
 		longURL = item["WindowsURL"].(*types.AttributeValueMemberS).Value
 	}
 
-	if err := utils.LogRedirect(ctx, shortcode); err != nil {
+	if err := utils.LogRedirect(ctx, shortcode, request); err != nil {
 		log.Printf("Error logging usage: %v", err)
-		return events.APIGatewayProxyResponse{
-			StatusCode: http.StatusInternalServerError,
-			Body:       "Error logging usage",
-		}, nil
+		// Don't return an error to the user if logging fails
+		// return events.APIGatewayProxyResponse{
+		// 	StatusCode: http.StatusInternalServerError,
+		// 	Body:       "Error logging usage",
+		// }, nil
 	}
 
 	log.Printf("Redirecting to: %s", longURL)
