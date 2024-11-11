@@ -52,7 +52,7 @@ func PutDynamoDBItem(ctx context.Context, item map[string]types.AttributeValue) 
 	return err
 }
 
-func LogRedirect(ctx context.Context, shortcode string, request events.APIGatewayProxyRequest) error {
+func LogRedirect(ctx context.Context, shortcode string, request events.APIGatewayProxyRequest, finalURL string) error {
 	// Extract platform information from User-Agent header
 	userAgent := request.Headers["User-Agent"]
 	platform := "unknown"
@@ -80,6 +80,7 @@ func LogRedirect(ctx context.Context, shortcode string, request events.APIGatewa
 			"Action":    &types.AttributeValueMemberS{Value: "redirect"},
 			"Platform":  &types.AttributeValueMemberS{Value: platform},
 			"IPAddress": &types.AttributeValueMemberS{Value: ipAddress},
+			"URL":       &types.AttributeValueMemberS{Value: finalURL},
 		},
 	})
 	return err
