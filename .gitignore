@@ -4,3 +4,4 @@ infra/**/*.js
 cdk.out
 cdk.context.json
 .env
+test.sh
