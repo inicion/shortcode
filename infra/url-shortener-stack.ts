@@ -11,13 +11,8 @@ import * as targets from 'aws-cdk-lib/aws-route53-targets';
 import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as path from 'path';
 
-interface URLShortenerStackProps extends cdk.StackProps {
-    tableName: string;
-    domainName: string;
-}
-
 export class URLShortenerStack extends cdk.Stack {
-    constructor(scope: cdk.App, id: string, props: URLShortenerStackProps) {
+    constructor(scope: cdk.App, id: string, props?: cdk.StackProps) {
         super(scope, id, props);
 
         const tableName = this.node.tryGetContext('tableName') || props.tableName;
